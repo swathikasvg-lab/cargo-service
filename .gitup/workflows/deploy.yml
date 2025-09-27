@@ -1,0 +1,57 @@
+name: Deploy Cargo Service
+
+on:
+  push:
+    branches:
+      - main   # deploy only when pushing to main
+  workflow_dispatch:   # allow manual trigger from GitHub UI
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Install Rust (via rustup)
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      # 3. Cache dependencies for faster builds
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # 4. Build
+      - name: Build project
+        run: cargo build --release
+
+      # 5. Run tests (optional)
+      - name: Run tests
+        run: cargo test --release
+
+      # 6. Deploy (example: copy binary to server using SSH)
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.SERVER_USER }}/cargo-service
+            git pull origin main
+            cargo build --release
+            nohup ./target/release/cargo-service > service.log 2>&1 &
+
